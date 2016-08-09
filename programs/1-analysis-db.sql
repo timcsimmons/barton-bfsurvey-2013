@@ -24,8 +24,18 @@ CREATE TABLE survey(
     , age_mother INTEGER
     , AP BOOLEAN
     , AP_reason INTEGER
+    , height FLOAT
+    , weight FLOAT
+    , bmi FLOAT
+    , bmi_category INTEGER
 );
 
+
+
+
+------------------------------------------------------------------------
+-- Create lookup tables for recoding
+------------------------------------------------------------------------
 
 
 -- Recode year of birth
@@ -58,9 +68,31 @@ UPDATE yob SET year = 1980 WHERE BIRTH_YEAR = '2980';
 UPDATE yob SET year = 1982 WHERE BIRTH_YEAR = '3-30-1982';
 
 
+-- Recode height
+DROP TABLE IF EXISTS codes.height;
+CREATE TABLE codes.height(Code FLOAT, raw_Code INTEGER, Description TEXT);
+INSERT INTO codes.height(raw_Code, Description)
+SELECT Code, Description
+FROM raw.MOTHER_HEIGHT
+;
+
+-- Each code represents an inch and 1 corresponds to "under 4'11" This
+-- recoding then matches the true height in inches except at the
+-- endpoints where it is one below the lower limit and one above the
+-- upper.
+UPDATE codes.height
+SET Code = (raw_Code - 1) + 4*12 + 10
+;
 
 
-INSERT INTO survey(RespondentId, sex, age_yc, bf_status, age_mother)
+
+
+------------------------------------------------------------------------
+-- Populate the main analysis table
+------------------------------------------------------------------------
+
+
+INSERT INTO survey(RespondentId, sex, age_yc, bf_status, age_mother, height, weight)
 SELECT s.RespondentID
     , s.SEX AS sex
     , s.AGE_YC AS age_yc
@@ -69,16 +101,20 @@ SELECT s.RespondentID
     -- The minimum possible age of mother based on self-reported
     -- year of birth
     , 2013 - yob.year - 1 AS age_mother
+    , (SELECT Code FROM codes.height WHERE raw_Code = s.MOTHER_HEIGHT)
+        AS height
+    , CASE
+        WHEN s.MOTHER_WEIGHT = '' THEN NULL
+	ELSE CAST(s.MOTHER_WEIGHT AS FLOAT)
+      END AS weight
 FROM raw.BFSURVEY_ALL AS s
     LEFT JOIN yob
         ON s.BIRTH_YEAR = yob.BIRTH_YEAR
 ;
 
 
-DROP TABLE yob;
 
 -- Derive analysis population
-
 DROP TABLE IF EXISTS codes.AP_reason;
 
 CREATE TABLE codes.AP_reason(Code INTEGER, Description TEXT);
@@ -111,7 +147,40 @@ SET AP = CASE WHEN AP_reason = 0 THEN 1 ELSE 0 END
 
 
 
--- Store codes used for the main table
+-- Derive body-mass index
+UPDATE survey
+SET bmi = weight/height/height*703
+;
+
+
+DROP TABLE IF EXISTS codes.bmi_category;
+CREATE TABLE codes.bmi_category(Code INTEGER, Description TEXT);
+INSERT INTO codes.bmi_category VALUES
+      (1, 'Underweight')
+    , (2, 'Normal weight')
+    , (3, 'Overweight')
+    , (4, 'Obese')
+;
+
+UPDATE survey
+SET bmi_category =
+    CASE
+      WHEN bmi >= 30.0 THEN 4
+      WHEN bmi >= 25.0 THEN 3
+      WHEN bmi >= 18.5 THEN 2
+      WHEN bmi >=  0.0 THEN 1
+      ELSE NULL
+    END
+;
+
+
+
+
+------------------------------------------------------------------------
+-- Persist codes for categorical variables
+------------------------------------------------------------------------
+
+
 DROP TABLE IF EXISTS codes.sex;
 
 CREATE TABLE codes.sex AS
@@ -136,5 +205,9 @@ FROM raw.BF_STATUS
 
 
 DETACH DATABASE raw;
+
+-- Remove unnecessary tables
+DROP TABLE yob;
+
 
 .save '../data/analysis.sqlite3'
