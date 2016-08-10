@@ -24,6 +24,9 @@ CREATE TABLE survey(
     , age_mother INTEGER
     , race INTEGER
     , ethnicity INTEGER
+    , education INTEGER
+    , income INTEGER
+    , marital_status INTEGER
     , AP BOOLEAN
     , AP_reason INTEGER
     , height FLOAT
@@ -83,6 +86,12 @@ INSERT INTO codes.ethnicity VALUES
     , (2, 'NOT HISPANIC', 'Not Hispanic or Latino');
 
 
+DROP TABLE IF EXISTS codes.income;
+CREATE TABLE codes.income AS
+SELECT Code, Description
+FROM raw.INCOME
+;
+
 -- Recode height
 DROP TABLE IF EXISTS codes.height;
 CREATE TABLE codes.height(Code FLOAT, raw_Code INTEGER, Description TEXT);
@@ -100,6 +109,44 @@ SET Code = (raw_Code - 1) + 4*12 + 10
 ;
 
 
+DROP TABLE IF EXISTS codes.marital_status;
+CREATE TABLE codes.marital_status(
+    Code INTEGER,
+    Description TEXT
+);
+INSERT INTO marital_status(Code, Description)
+SELECT Code, Description FROM raw.MARRIED UNION
+SELECT Code, Description FROM raw.WIDOWED UNION
+SELECT Code, Description FROM raw.DIVORCED UNION
+SELECT Code, Description FROM raw.SEPARATED UNION
+SELECT Code, Description FROM raw.NEV_MARRIED
+;
+
+DROP TABLE IF EXISTS marital;
+CREATE TABLE marital(RespondentID INTEGER, status INTEGER);
+
+WITH cte_marital AS (
+SELECT RespondentID, MARRIED AS status
+FROM raw.BFSURVEY_ALL
+    UNION
+SELECT RespondentID, WIDOWED AS status
+FROM raw.BFSURVEY_ALL
+    UNION
+SELECT RespondentID, DIVORCED AS status
+FROM raw.BFSURVEY_ALL
+    UNION
+SELECT RespondentID, SEPARATED AS status
+FROM raw.BFSURVEY_ALL
+    UNION
+SELECT RespondentID, NEV_MARRIED AS status
+FROM raw.BFSURVEY_ALL
+)
+INSERT INTO marital
+SELECT RespondentID, MIN(status) AS status
+FROM cte_marital
+WHERE status IS NOT NULL
+GROUP BY RespondentID
+;
 
 
 ------------------------------------------------------------------------
@@ -109,7 +156,7 @@ SET Code = (raw_Code - 1) + 4*12 + 10
 
 INSERT INTO survey(RespondentId,
         sex, age_yc, bf_status, age_mother,
-	race, ethnicity,
+	race, ethnicity, education, income, marital_status,
 	height, weight)
 SELECT s.RespondentID
     , s.SEX AS sex
@@ -123,6 +170,10 @@ SELECT s.RespondentID
         AS race
     , (SELECT Code FROM codes.ethnicity WHERE raw_Code = s.ETHNIC)
         AS ethnicity
+    , s.EDUCATION as education
+    , (SELECT Code FROM codes.income WHERE Description = s.INCOME)
+        AS income
+    , ms.status as marital_status
     , (SELECT Code FROM codes.height WHERE raw_Code = s.MOTHER_HEIGHT)
         AS height
     , CASE
@@ -132,6 +183,8 @@ SELECT s.RespondentID
 FROM raw.BFSURVEY_ALL AS s
     LEFT JOIN yob
         ON s.BIRTH_YEAR = yob.BIRTH_YEAR
+    LEFT JOIN marital AS ms
+        ON s.RespondentID = ms.RespondentID
 ;
 
 
@@ -225,6 +278,12 @@ FROM raw.BF_STATUS
 ;
 
 
+DROP TABLE IF EXISTS codes.education;
+
+CREATE TABLE codes.education AS
+SELECT Code, Description
+FROM raw.EDUCATION
+;
 
 DETACH DATABASE raw;
 
