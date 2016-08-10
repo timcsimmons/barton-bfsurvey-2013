@@ -92,6 +92,7 @@ SELECT Code, Description
 FROM raw.INCOME
 ;
 
+
 -- Recode height
 DROP TABLE IF EXISTS codes.height;
 CREATE TABLE codes.height(Code FLOAT, raw_Code INTEGER, Description TEXT);
@@ -284,6 +285,13 @@ CREATE TABLE codes.education AS
 SELECT Code, Description
 FROM raw.EDUCATION
 ;
+
+
+-- Jupyter notebook has trouble with dollar signs
+UPDATE codes.income
+SET Description = REPLACE(Description, '$', '\$')
+;
+
 
 DETACH DATABASE raw;
 
