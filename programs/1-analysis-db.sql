@@ -22,6 +22,8 @@ CREATE TABLE survey(
     , age_yc INTEGER
     , bf_status INTEGER
     , age_mother INTEGER
+    , race INTEGER
+    , ethnicity INTEGER
     , AP BOOLEAN
     , AP_reason INTEGER
     , height FLOAT
@@ -67,6 +69,19 @@ UPDATE yob SET year = 1976 WHERE BIRTH_YEAR = '1976  LOL!';
 UPDATE yob SET year = 1980 WHERE BIRTH_YEAR = '2980';
 UPDATE yob SET year = 1982 WHERE BIRTH_YEAR = '3-30-1982';
 
+-- Recode race and ethnicity
+DROP TABLE IF EXISTS codes.race;
+CREATE TABLE codes.race AS
+SELECT Code, Description
+FROM raw.RACE
+;
+
+DROP TABLE IF EXISTS codes.ethnicity;
+CREATE TABLE codes.ethnicity(Code INTEGER, raw_Code TEXT, Description TEXT);
+INSERT INTO codes.ethnicity VALUES
+      (1, 'HISPANIC', 'Hispanic or Latino')
+    , (2, 'NOT HISPANIC', 'Not Hispanic or Latino');
+
 
 -- Recode height
 DROP TABLE IF EXISTS codes.height;
@@ -92,7 +107,10 @@ SET Code = (raw_Code - 1) + 4*12 + 10
 ------------------------------------------------------------------------
 
 
-INSERT INTO survey(RespondentId, sex, age_yc, bf_status, age_mother, height, weight)
+INSERT INTO survey(RespondentId,
+        sex, age_yc, bf_status, age_mother,
+	race, ethnicity,
+	height, weight)
 SELECT s.RespondentID
     , s.SEX AS sex
     , s.AGE_YC AS age_yc
@@ -101,6 +119,10 @@ SELECT s.RespondentID
     -- The minimum possible age of mother based on self-reported
     -- year of birth
     , 2013 - yob.year - 1 AS age_mother
+    , (SELECT Code FROM codes.race WHERE Description = s.RACE_STRING)
+        AS race
+    , (SELECT Code FROM codes.ethnicity WHERE raw_Code = s.ETHNIC)
+        AS ethnicity
     , (SELECT Code FROM codes.height WHERE raw_Code = s.MOTHER_HEIGHT)
         AS height
     , CASE
