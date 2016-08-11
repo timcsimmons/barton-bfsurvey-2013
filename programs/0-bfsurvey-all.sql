@@ -1,3 +1,5 @@
+-- -*- mode: sql; sql-product: sqlite; -*-
+
 ------------------------------------------------------------------------
 -- Program: 0-bfsurvey-all.sql
 -- Directory: bfsurvey/programs
