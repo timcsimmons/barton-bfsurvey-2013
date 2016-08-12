@@ -344,7 +344,7 @@ INSERT INTO codes.heart_surgery VALUES
 
 DROP TABLE IF EXISTS codes.chest_injury;
 CREATE TABLE codes.chest_injury(Code INTEGER, raw_Code INTEGER, Description TEXT);
-INSERT INTO codes.chest_injury VALUES
+INSERT INTO codes.chest_injury(Code, raw_Code, Description) VALUES
       (1, 2, 'Chest injury')
     , (0, NULL, 'No chest injury');
 
