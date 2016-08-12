@@ -20,10 +20,16 @@
 DROP TABLE IF EXISTS survey;
 CREATE TABLE survey(
       RespondentID INTEGER PRIMARY KEY
+
+    , start_date
+
+    -- Inclusion criteria
     , sex INTEGER
     , age_yc INTEGER
     , bf_status INTEGER
     , age_mother INTEGER
+
+    -- Demographics and populations
     , race INTEGER
     , ethnicity INTEGER
     , education INTEGER
@@ -31,6 +37,9 @@ CREATE TABLE survey(
     , marital_status INTEGER
     , AP BOOLEAN
     , AP_reason INTEGER
+    , pumper INTEGER
+
+    -- Covariates
     , height FLOAT
     , weight FLOAT
     , bmi FLOAT
@@ -57,6 +66,32 @@ CREATE TABLE survey(
     , conception INTEGER
     , natural_conception INTEGER
     , delivery_mode INTEGER
+    , baby_gestational_age FLOAT
+    , baby_healthy INTEGER
+    , baby_tongue_tie INTEGER
+    , first_bf INTEGER
+    , baby_in_bed INTEGER
+    , pacifier INTEGER
+    , swaddle INTEGER
+    , baby_formula INTEGER
+    , solid_food INTEGER
+
+    -- Exposures
+    , bc_NFP
+    , bc_barrier
+    , bc_copper_IUD
+    , bc_hormonal_IUD
+    , bc_progestin_pill
+    , bc_combination_pill
+    , bc_patch
+    , bc_implant
+    , bc_shot
+    , bc_ring
+    , bc_other
+
+    -- Outcomes
+    , milk_supply INTEGER
+    , low_milk_supply INTEGER
 );
 
 
@@ -66,6 +101,11 @@ CREATE TABLE survey(
 -- Create lookup tables for recoding
 ------------------------------------------------------------------------
 
+DROP TABLE IF EXISTS codes.pumper;
+CREATE TABLE codes.pumper(Code INTEGER, Description TEXT);
+INSERT INTO codes.pumper(Code, Description) VALUES
+      (1, 'Expressed milk to feed baby in first six months of life')
+    , (0, 'Did not express milk to feed baby in first six months of life');
 
 -- Recode year of birth
 DROP TABLE IF EXISTS yob;
@@ -151,20 +191,20 @@ DROP TABLE IF EXISTS marital;
 CREATE TABLE marital(RespondentID INTEGER, status INTEGER);
 
 WITH cte_marital AS (
-SELECT RespondentID, MARRIED AS status
-FROM raw.BFSURVEY_ALL
-    UNION
-SELECT RespondentID, WIDOWED AS status
-FROM raw.BFSURVEY_ALL
-    UNION
-SELECT RespondentID, DIVORCED AS status
-FROM raw.BFSURVEY_ALL
-    UNION
-SELECT RespondentID, SEPARATED AS status
-FROM raw.BFSURVEY_ALL
-    UNION
-SELECT RespondentID, NEV_MARRIED AS status
-FROM raw.BFSURVEY_ALL
+    SELECT RespondentID, MARRIED AS status
+    FROM raw.BFSURVEY_ALL
+        UNION
+    SELECT RespondentID, WIDOWED AS status
+    FROM raw.BFSURVEY_ALL
+        UNION
+    SELECT RespondentID, DIVORCED AS status
+    FROM raw.BFSURVEY_ALL
+        UNION
+    SELECT RespondentID, SEPARATED AS status
+    FROM raw.BFSURVEY_ALL
+        UNION
+    SELECT RespondentID, NEV_MARRIED AS status
+    FROM raw.BFSURVEY_ALL
 )
 INSERT INTO marital
 SELECT RespondentID, MIN(status) AS status
@@ -1187,6 +1227,201 @@ INSERT INTO codes.delivery_mode(Code, Description) VALUES
     , (2, 'C-section');
 
 
+DROP TABLE IF EXISTS codes.baby_gestational_age;
+CREATE TABLE codes.baby_gestational_age(Code FLOAT, Description TEXT);
+INSERT INTO codes.baby_gestational_age(Description)
+SELECT Code
+FROM raw.BABY1_Gestation
+;
+
+UPDATE codes.baby_gestational_age
+SET Code =
+    CASE Description
+      WHEN 'Less than 28 Weeks' THEN 28.0
+      WHEN '28-32 Weeks' THEN (28 + 32 + 0.0)/2
+      WHEN '33-36 Weeks' THEN (33 + 36 + 0.0)/2
+      WHEN '37-39 Weeks' THEN (37 + 39 + 0.0)/2
+      WHEN '40-41 Weeks' THEN (40 + 41 + 0.0)/2
+      WHEN '42 Weeks' THEN (42 + 42 + 0.0)/2
+      WHEN '43 or More Weeks' THEN 43.0
+      ELSE NULL
+    END
+;
+
+
+DROP TABLE IF EXISTS codes.baby_healthy;
+CREATE TABLE codes.baby_healthy(Code INTEGER, Description TEXT);
+INSERT INTO codes.baby_healthy(Code, Description) VALUES
+      (1, 'Baby has not been diagnosed with chronic health problems')
+    , (0, 'Baby has been diagnosed with chronic health problems');
+
+
+DROP TABLE IF EXISTS codes.baby_tongue_tie;
+CREATE TABLE codes.baby_tongue_tie(Code INTEGER, raw_Code INTEGER, Description TEXT);
+INSERT INTO codes.baby_tongue_tie(Code, raw_Code, Description) VALUES
+      (NULL, 4, 'Don''t know')
+    , (0, 3, 'No')
+    , (1, 2, 'Yes, and it was not clipped')
+    , (2, 1, 'Yes, and it was clipped');
+
+
+DROP TABLE IF EXISTS codes.first_bf;
+CREATE TABLE codes.first_bf(Code INTEGER, raw_Code INTEGER, Description TEXT);
+INSERT INTO codes.first_bf(Code, raw_Code, Description)
+SELECT Code, Code, Description
+FROM raw.FIRST_BF
+;
+
+UPDATE codes.first_bf
+SET Code = NULL
+WHERE raw_Code = 0
+;
+
+
+DROP TABLE IF EXISTS codes.baby_in_bed;
+CREATE TABLE codes.baby_in_bed(Code INTEGER, Description TEXT);
+INSERT INTO codes.baby_in_bed(Code, Description) VALUES
+      (1, 'Baby started night in mother''s bed during first six months of life')
+    , (0, 'Baby did not start night in mother''s bed during first six months of life');
+
+
+DROP TABLE IF EXISTS codes.pacifier;
+CREATE TABLE codes.pacifier(Code INTEGER, raw_Code INTEGER, Description TEXT);
+INSERT INTO codes.pacifier(raw_Code, Description)
+SELECT Code, Description
+FROM raw.PACIFIER
+;
+
+UPDATE codes.pacifier
+SET Code = raw_Code - 1
+;
+
+
+DROP TABLE IF EXISTS codes.swaddle;
+CREATE TABLE codes.swaddle(Code INTEGER, raw_Code INTEGER, Description TEXT);
+INSERT INTO codes.swaddle(raw_Code, Description)
+SELECT Code, Description
+FROM raw.SWADDLE
+;
+
+UPDATE codes.swaddle
+SET Code = raw_Code - 1
+;
+
+
+DROP TABLE IF EXISTS codes.baby_formula;
+CREATE TABLE codes.baby_formula(Code INTEGER, raw_Code INTEGER, Description TEXT);
+INSERT INTO codes.baby_formula(Code, raw_Code, Description) VALUES
+      (1, 1, 'Baby received formula supplementation')
+    , (0, 2, 'Baby never received formula supplmentation');
+
+
+DROP TABLE IF EXISTS codes.solid_food;
+CREATE TABLE codes.solid_food(Code INTEGER, Description TEXT);
+INSERT INTO codes.solid_food(Code, Description) VALUES
+      (1, 'Started baby on solid food before six months')
+    , (0, 'Started baby on solid food at or after six months');
+
+
+
+DROP TABLE IF EXISTS codes.milk_supply;
+CREATE TABLE codes.milk_supply(Code INTEGER, raw_Code INTEGER, Description TEXT);
+INSERT INTO codes.milk_supply(Code, raw_Code, Description) VALUES
+      (4, 1, 'More than my baby needed')
+    , (3, 2, 'Exactly what my baby needed')
+    , (2, 3, 'Slightly less than my baby needed')
+    , (1, 4, 'A lot less than my baby needed');
+
+
+DROP TABLE IF EXISTS codes.low_milk_supply;
+CREATE TABLE codes.low_milk_supply(Code INTEGER, Description TEXT);
+INSERT INTO codes.low_milk_supply(Code, Description) VALUES
+      (1, 'Milk supply slightly or a lot less than baby needed')
+    , (0, 'Milk supply exactly what or more than baby needed');
+
+
+
+
+
+DROP TABLE IF EXISTS codes.bc_NFP;
+CREATE TABLE codes.bc_NFP(Code INTEGER, raw_Code INTEGER, Description TEXT);
+INSERT INTO codes.bc_NFP(Code, raw_Code, Description) VALUES
+      (1, 1, 'Used Natural Family Planning after birth of child')
+    , (0, 2, 'Did not use Natural Family Planning after birth of child');
+
+
+DROP TABLE IF EXISTS codes.bc_barrier;
+CREATE TABLE codes.bc_barrier(Code INTEGER, raw_Code INTEGER, Description TEXT);
+INSERT INTO codes.bc_barrier(Code, raw_Code, Description) VALUES
+      (1, 1, 'Used Barrier after birth of child')
+    , (0, 2, 'Did not use Barrier after birth of child');
+
+
+DROP TABLE IF EXISTS codes.bc_copper_IUD;
+CREATE TABLE codes.bc_copper_IUD(Code INTEGER, raw_Code INTEGER, Description TEXT);
+INSERT INTO codes.bc_copper_IUD(Code, raw_Code, Description) VALUES
+      (1, 1, 'Used Copper IUD after birth of child')
+    , (0, 2, 'Did not use Copper IUD after birth of child');
+
+
+DROP TABLE IF EXISTS codes.bc_hormonal_IUD;
+CREATE TABLE codes.bc_hormonal_IUD(Code INTEGER, raw_Code INTEGER, Description TEXT);
+INSERT INTO codes.bc_hormonal_IUD(Code, raw_Code, Description) VALUES
+      (1, 1, 'Used Hormonal IUD after birth of child')
+    , (0, 2, 'Did not use Hormonal IUD after birth of child');
+
+
+DROP TABLE IF EXISTS codes.bc_progestin_pill;
+CREATE TABLE codes.bc_progestin_pill(Code INTEGER, raw_Code INTEGER, Description TEXT);
+INSERT INTO codes.bc_progestin_pill(Code, raw_Code, Description) VALUES
+      (1, 1, 'Used Progestin-only birth control pill after birth of child')
+    , (0, 2, 'Did not use Progestin-only birth control pill after birth of child');
+
+
+DROP TABLE IF EXISTS codes.bc_combination_pill;
+CREATE TABLE codes.bc_combination_pill(Code INTEGER, raw_Code INTEGER, Description TEXT);
+INSERT INTO codes.bc_combination_pill(Code, raw_Code, Description) VALUES
+      (1, 1, 'Used Combination birth control pill after birth of child')
+    , (0, 2, 'Did not use Combination birth control pill after birth of child');
+
+
+DROP TABLE IF EXISTS codes.bc_patch;
+CREATE TABLE codes.bc_patch(Code INTEGER, raw_Code INTEGER, Description TEXT);
+INSERT INTO codes.bc_patch(Code, raw_Code, Description) VALUES
+      (1, 1, 'Used Patch after birth of child')
+    , (0, 2, 'Did not use Patch after birth of child');
+
+
+DROP TABLE IF EXISTS codes.bc_implant;
+CREATE TABLE codes.bc_implant(Code INTEGER, raw_Code INTEGER, Description TEXT);
+INSERT INTO codes.bc_implant(Code, raw_Code, Description) VALUES
+      (1, 1, 'Used Implant after birth of child')
+    , (0, 2, 'Did not use Implant after birth of child');
+
+
+DROP TABLE IF EXISTS codes.bc_shot;
+CREATE TABLE codes.bc_shot(Code INTEGER, raw_Code INTEGER, Description TEXT);
+INSERT INTO codes.bc_shot(Code, raw_Code, Description) VALUES
+      (1, 1, 'Used Shot after birth of child')
+    , (0, 2, 'Did not use Shot after birth of child');
+
+
+DROP TABLE IF EXISTS codes.bc_ring;
+CREATE TABLE codes.bc_ring(Code INTEGER, raw_Code INTEGER, Description TEXT);
+INSERT INTO codes.bc_ring(Code, raw_Code, Description) VALUES
+      (1, 1, 'Used Vaginal ring after birth of child')
+    , (0, 2, 'Did not use Vaginal ring after birth of child');
+
+
+DROP TABLE IF EXISTS codes.bc_other;
+CREATE TABLE codes.bc_other(Code INTEGER, raw_Code INTEGER, Description TEXT);
+INSERT INTO codes.bc_other(Code, raw_Code, Description) VALUES
+      (1, 0, 'Used Other birth control after birth of child')
+    , (0, 1, 'Did not use Other birth control after birth of child');
+
+
+
+
 ------------------------------------------------------------------------
 -- Populate the main analysis table
 ------------------------------------------------------------------------
@@ -1194,9 +1429,11 @@ INSERT INTO codes.delivery_mode(Code, Description) VALUES
 
 INSERT INTO survey(
         RespondentId
+	, start_date
         , sex
 	, age_yc
 	, bf_status
+	, pumper
 	, age_mother
 	, race
 	, ethnicity
@@ -1226,11 +1463,43 @@ INSERT INTO survey(
 	, breast_change
 	, conception
 	, delivery_mode
+	, baby_gestational_age
+	, baby_healthy
+	, baby_tongue_tie
+	, first_bf
+	, baby_in_bed
+	, pacifier
+	, swaddle
+	, baby_formula
+	, solid_food
+
+	, milk_supply
+	, bc_NFP
+	, bc_barrier
+	, bc_copper_IUD
+	, bc_hormonal_IUD
+	, bc_progestin_pill
+	, bc_combination_pill
+	, bc_patch
+	, bc_implant
+	, bc_shot
+	, bc_ring
+	, bc_other
     )
 SELECT s.RespondentID
+    , s.StartDate as start_date
     , s.SEX AS sex
     , s.AGE_YC AS age_yc
     , s.BF_STATUS AS bf_status
+
+    , CASE s.LEVEL_BF_6MO
+        WHEN 1 THEN 0
+	WHEN 2 THEN 1
+	WHEN 3 THEN 1
+	WHEN 4 THEN 0
+	WHEN 5 THEN 1
+	ELSE NULL
+      END AS pumper
 
     -- The minimum possible age of mother based on self-reported
     -- year of birth
@@ -1300,6 +1569,70 @@ SELECT s.RespondentID
 	WHEN 4 THEN 2
 	ELSE NULL
       END AS delivery_mode
+    , (SELECT Code FROM codes.baby_gestational_age WHERE Description = s.BABY1_Gestation)
+        AS baby_gestational_age
+    , CASE
+        WHEN s.BABY_HEALTH_YES = 2 THEN 0
+	WHEN s.BABY_HEALTH_NO = 1 THEN 1
+	ELSE NULL
+      END AS baby_healthy
+    , (SELECT Code FROM codes.baby_tongue_tie WHERE raw_Code = s.TONGUE_TIE)
+        AS baby_tongue_tie
+    , (SELECT Code FROM codes.first_bf WHERE raw_Code = s.FIRST_BF)
+        AS first_bf
+    , CASE s.START_NIGHT_F6MO
+        WHEN 1 THEN 1
+	WHEN 2 THEN 0
+	WHEN 3 THEN 0
+	WHEN 0 THEN 0
+	ELSE NULL
+      END AS baby_in_bed
+    , (SELECT Code FROM codes.pacifier WHERE raw_Code = s.PACIFIER)
+        AS pacifier
+    , (SELECT Code FROM codes.swaddle WHERE raw_Code = s.SWADDLE)
+        AS swaddle
+
+    , (SELECT Code FROM codes.baby_formula WHERE raw_CODE = s.FORMULA_EVER)
+        AS baby_formula
+
+      -- LIMITATION We don't now how old the child was, so we can't fill
+      -- in the missing values when the question was not applicable
+    , CASE s.SOLIDS_AGE
+        WHEN 1 THEN 1
+	WHEN 2 THEN 1
+	WHEN 3 THEN 1
+	WHEN 4 THEN 0
+	WHEN 5 THEN 0
+	WHEN 6 THEN 0
+	WHEN 7 THEN 0
+	WHEN 8 THEN 0
+	ELSE NULL
+      END AS solid_food
+    , (SELECT Code FROM codes.milk_supply WHERE raw_Code = s.GENERAL_SUPPLY)
+        AS milk_supply
+    , (SELECT Code FROM codes.bc_NFP WHERE raw_Code = s.BC_NFP)
+        AS bc_NFP
+    , (SELECT Code FROM codes.bc_barrier WHERE raw_Code = s.BC_BAR)
+        AS bc_barrier
+    , (SELECT Code FROM codes.bc_copper_IUD WHERE raw_Code = s.BC_CIUD)
+        AS bc_copper_IUD
+    , (SELECT Code FROM codes.bc_hormonal_IUD WHERE raw_Code = s.BC_HIUD)
+        AS bc_hormonal_IUD
+    , (SELECT Code FROM codes.bc_progestin_pill WHERE raw_Code = s.BC_PBCP)
+        AS bc_progestin_pill
+    , (SELECT Code FROM codes.bc_combination_pill WHERE raw_Code = s.BC_CBCP)
+        AS bc_combination_pill
+    , (SELECT Code FROM codes.bc_patch WHERE raw_Code = s.BC_PAT)
+        AS bc_patch
+    , (SELECT Code FROM codes.bc_implant WHERE raw_Code = s.BC_IMP)
+        AS bc_implant
+    , (SELECT Code FROM codes.bc_shot WHERE raw_Code = s.BC_SHOT)
+        AS bc_shot
+    , (SELECT Code FROM codes.bc_ring WHERE raw_Code = s.BC_VR)
+        AS bc_ring
+    , (SELECT Code FROM codes.bc_other WHERE raw_Code = s.BC1_OTHER)
+        AS bc_other
+
 FROM raw.BFSURVEY_ALL AS s
     LEFT JOIN yob
         ON s.BIRTH_YEAR = yob.BIRTH_YEAR
@@ -1322,7 +1655,8 @@ DROP TABLE IF EXISTS codes.AP_reason;
 
 CREATE TABLE codes.AP_reason(Code INTEGER, Description TEXT);
 INSERT INTO codes.AP_reason(Code, Description) VALUES
-      (1, 'Respondent was male')
+      (0, 'Respondent is eligible')
+    , (1, 'Respondent was male')
     , (2, 'Youngest child older than 18 months')
     , (3, 'Youngest child weaned more than 18 months ago')
     , (4, 'Youngest child never breastfed')
@@ -1351,6 +1685,12 @@ SET AP = CASE WHEN AP_reason = 0 THEN 1 ELSE 0 END
         CASE
       	  WHEN conception = 1 THEN 1
 	  WHEN conception IS NOT NULL THEN 0
+	  ELSE NULL
+	END
+    , low_milk_supply =
+        CASE
+	  WHEN milk_supply <= 2 THEN 1
+	  WHEN milk_supply IS NOT NULL THEN 0
 	  ELSE NULL
 	END
 ;
