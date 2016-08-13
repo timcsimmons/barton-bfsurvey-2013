@@ -59,6 +59,7 @@ CREATE TABLE survey(
     , POS INTEGER
     , thyroid INTEGER
     , depression INTEGER
+    , stress INTEGER
     , breast_type INTEGER
     , menarche INTEGER
     , irregular_period INTEGER
@@ -66,6 +67,7 @@ CREATE TABLE survey(
     , conception INTEGER
     , natural_conception INTEGER
     , delivery_mode INTEGER
+    , singleton INTEGER
     , baby_gestational_age FLOAT
     , baby_healthy INTEGER
     , baby_tongue_tie INTEGER
@@ -574,6 +576,12 @@ GROUP BY RespondentID
 ;
 
 
+DROP TABLE IF EXISTS codes.stress;
+CREATE TABLE codes.stress(Code INTEGER, raw_Code INTEGER, Description TEXT);
+INSERT INTO codes.stress(Code, raw_Code, Description) VALUES
+      (1, 2, 'A major stressful event occurred while breastfeeding')
+    , (0, 1, 'No major stressful event occurred while breastfeeding');
+    
 
 DROP TABLE IF EXISTS codes.breast_type;
 CREATE TABLE codes.breast_type(Code INTEGER, Description TEXT);
@@ -1227,6 +1235,13 @@ INSERT INTO codes.delivery_mode(Code, Description) VALUES
     , (2, 'C-section');
 
 
+DROP TABLE IF EXISTS codes.singleton;
+CREATE TABLE codes.singleton(Code INTEGER, raw_Code INTEGER, Description TEXT);
+INSERT INTO codes.singleton(Code, raw_Code, Description) VALUES
+      (1, 1, 'Youngest baby was a singleton')
+    , (0, 2, 'Youngest baby was not singleton');
+
+
 DROP TABLE IF EXISTS codes.baby_gestational_age;
 CREATE TABLE codes.baby_gestational_age(Code FLOAT, Description TEXT);
 INSERT INTO codes.baby_gestational_age(Description)
@@ -1457,12 +1472,14 @@ INSERT INTO survey(
 	, POS
 	, thyroid
 	, depression
+	, stress
 	, breast_type
 	, menarche
 	, irregular_period
 	, breast_change
 	, conception
 	, delivery_mode
+	, singleton
 	, baby_gestational_age
 	, baby_healthy
 	, baby_tongue_tie
@@ -1539,12 +1556,14 @@ SELECT s.RespondentID
 	WHEN h.bled_ever = 0 AND h.bled_yc = 0 THEN 0
 	ELSE NULL
       END AS hemorrhage
-    , c.diabetes_1
-    , c.diabetes_2
-    , c.diabetes_g
-    , c.POS
-    , c.thyroid
-    , c.depression
+    , c.diabetes_1 AS diabetes_1
+    , c.diabetes_2 AS diabetes_2
+    , c.diabetes_g AS diabetes_g
+    , c.POS AS POS
+    , c.thyroid AS thyroid
+    , c.depression AS depression
+    , (SELECT Code FROM codes.stress WHERE raw_Code = s.STRESS)
+        AS stress
     , CASE
         WHEN s.BREAST_PICTURE IN (1, 2, 3, 4) THEN s.BREAST_PICTURE
 	WHEN bto.Code IN (1, 2, 3, 4, 90) THEN 90
@@ -1569,6 +1588,8 @@ SELECT s.RespondentID
 	WHEN 4 THEN 2
 	ELSE NULL
       END AS delivery_mode
+    , (SELECT Code FROM codes.singleton WHERE raw_Code = s.SINGLETON)
+        AS singleton
     , (SELECT Code FROM codes.baby_gestational_age WHERE Description = s.BABY1_Gestation)
         AS baby_gestational_age
     , CASE
