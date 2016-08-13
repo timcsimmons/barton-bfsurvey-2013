@@ -44,6 +44,8 @@ CREATE TABLE survey(
     , weight FLOAT
     , bmi FLOAT
     , bmi_category INTEGER
+    , alcohol INTEGER
+    , smoke INTEGER
     , metformin INTEGER
     , BC_pills INTEGER
     , BC_age INTEGER
@@ -77,6 +79,7 @@ CREATE TABLE survey(
     , swaddle INTEGER
     , baby_formula INTEGER
     , solid_food INTEGER
+    , prior_bf INTEGER
 
     -- Exposures
     , bc_NFP
@@ -175,6 +178,18 @@ UPDATE codes.height
 SET Code = (raw_Code - 1) + 4*12 + 10
 ;
 
+
+DROP TABLE IF EXISTS codes.alcohol;
+CREATE TABLE codes.alcohol(Code INTEGER, Description TEXT);
+INSERT INTO codes.alcohol(Code, Description) VALUES
+      (1, 'Used alcohol weekly or daily while breastfeeding')
+    , (0, 'Used alcohol monthly, rarely or not at all while breastfeeding');
+
+DROP TABLE IF EXISTS codes.smoke;
+CREATE TABLE codes.smoke(Code INTEGER, Description TEXT);
+INSERT INTO codes.smoke(Code, Description) VALUES
+      (1, 'Smoked cigarettes while breastfeeding')
+    , (0, 'Did not smoke cigarettes while breastfeeding');
 
 DROP TABLE IF EXISTS codes.marital_status;
 CREATE TABLE codes.marital_status(
@@ -1338,6 +1353,11 @@ INSERT INTO codes.solid_food(Code, Description) VALUES
     , (0, 'Started baby on solid food at or after six months');
 
 
+DROP TABLE IF EXISTS codes.prior_bf;
+CREATE TABLE codes.prior_bf(Code INTEGER, raw_Code INTEGER, Description TEXT);
+INSERT INTO codes.prior_bf(Code, raw_Code, Description) VALUES
+      (1, 1, 'Breastfed one or more babies prior to youngest child')
+    , (0, 2, 'Did not breastfeed any babies prior to youngest child');
 
 DROP TABLE IF EXISTS codes.milk_supply;
 CREATE TABLE codes.milk_supply(Code INTEGER, raw_Code INTEGER, Description TEXT);
@@ -1457,6 +1477,8 @@ INSERT INTO survey(
 	, marital_status
 	, height
 	, weight
+	, alcohol
+	, smoke
 	, metformin
 	, BC_pills
 	, BC_age
@@ -1489,6 +1511,7 @@ INSERT INTO survey(
 	, swaddle
 	, baby_formula
 	, solid_food
+	, prior_bf
 
 	, milk_supply
 	, bc_NFP
@@ -1535,6 +1558,21 @@ SELECT s.RespondentID
         WHEN s.MOTHER_WEIGHT = '' THEN NULL
 	ELSE CAST(s.MOTHER_WEIGHT AS FLOAT)
       END AS weight
+    , CASE s.ALCOHOL
+        WHEN 1 THEN 1
+	WHEN 2 THEN 1
+	WHEN 3 THEN 0
+	WHEN 4 THEN 0
+	WHEN 5 THEN 0
+	ELSE NULL
+      END AS alcohol
+    , CASE s.SMOKE
+        WHEN 1 THEN 1
+	WHEN 2 THEN 1
+	WHEN 3 THEN 1
+	WHEN 4 THEN 0
+	ELSE NULL
+      END AS smoke
     , (SELECT Code FROM codes.metformin WHERE raw_Code = s.METFORMIN)
         AS metformin
     , (SELECT Code FROM codes.BC_pills WHERE raw_Code = s.BC_PILLS)
@@ -1629,6 +1667,7 @@ SELECT s.RespondentID
 	WHEN 8 THEN 0
 	ELSE NULL
       END AS solid_food
+    , (SELECT Code FROM codes.prior_bf WHERE raw_Code = s.PRIOR_BF) AS prior_bf
     , (SELECT Code FROM codes.milk_supply WHERE raw_Code = s.GENERAL_SUPPLY)
         AS milk_supply
     , (SELECT Code FROM codes.bc_NFP WHERE raw_Code = s.BC_NFP)
